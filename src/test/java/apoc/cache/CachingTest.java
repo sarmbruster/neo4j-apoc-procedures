@@ -52,7 +52,7 @@ public class CachingTest {
         db.execute("CREATE (:Person{name:'John Doe'})");
 
         // when
-        List<Map<String, Object>> resultProcedure = Iterators.asList(db.execute("call apoc.cache.cypherResults('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count"));
+        List<Map<String, Object>> resultProcedure = Iterators.asList(db.execute("call apoc.cache.cypher('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count"));
         List<Map<String, Object>> resultDirect = Iterators.asList(db.execute("match (n) return n.name as name, count(*) as count"));
 
         // then
@@ -71,13 +71,13 @@ public class CachingTest {
         long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
 
         // when
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
 
         long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeFirst = now-start;
         start = now;
 
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
 
         now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeSecond = now - start;
@@ -95,11 +95,11 @@ public class CachingTest {
         final String cypher = "match (n) return n.name as name, count(*) as count";
 
         // when
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
         long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
         assertEquals(1, Caching.cache.size());
 
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
         long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeFirst = now - start;
         assertEquals(1, Caching.cache.size());
@@ -107,7 +107,7 @@ public class CachingTest {
         Thread.sleep(100);
         assertEquals(0, Caching.cache.size());
         start = stopwatch.runtime(TimeUnit.MILLISECONDS);
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
         now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeSecond = now - start;
 

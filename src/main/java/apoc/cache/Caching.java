@@ -28,10 +28,10 @@ public class Caching {
     public GraphDatabaseService graphDatabaseService;
 
     @Procedure
-    @Description("call apoc.cache.cypherResults('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count")
-    public Stream<MapResult> cypherResults(@Name("cypher") String cypher,
-                                           @Name("params") Map<String, Object> params,
-                                           @Name("ttl") long ttl) {
+    @Description("call apoc.cache.cypher('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count")
+    public Stream<MapResult> cypher(@Name("cypher") String cypher,
+                                    @Name("params") Map<String, Object> params,
+                                    @Name("ttl") long ttl) {
         Pair<String, Map<String, Object>> key = Pair.of(cypher, params);
         List<Map<String, Object>> cachedResult = cache.get(key);
         if (cachedResult==null) {
