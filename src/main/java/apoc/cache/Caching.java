@@ -22,7 +22,7 @@ public class Caching {
     /*
      * holds cypher + params as key -> maps to a materialized result
      */
-    private static final TTLMap<Pair<String,Map<String,Object>>, List<Map<String,Object>>> cache = new TTLMapImpl<>();
+    public static final TTLMap<Pair<String,Map<String,Object>>, List<Map<String,Object>>> cache = new TTLMapImpl<>();
 
     @Context
     public GraphDatabaseService graphDatabaseService;

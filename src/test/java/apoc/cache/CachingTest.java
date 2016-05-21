@@ -87,4 +87,34 @@ public class CachingTest {
         assertThat(runtimeSecond, lessThan(20l));
     }
 
+    @Test
+    public void shouldExpireCachedResults() throws Exception {
+
+        // given
+        db.execute("CREATE (:Person{name:'John Doe'})");
+        final String cypher = "match (n) return n.name as name, count(*) as count";
+
+        // when
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
+        assertEquals(1, Caching.cache.size());
+
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
+        long runtimeFirst = now - start;
+        assertEquals(1, Caching.cache.size());
+
+        Thread.sleep(100);
+        assertEquals(0, Caching.cache.size());
+        start = stopwatch.runtime(TimeUnit.MILLISECONDS);
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypherResults('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        now = stopwatch.runtime(TimeUnit.MILLISECONDS);
+        long runtimeSecond = now - start;
+
+        // then
+        assertThat(runtimeFirst, lessThan(runtimeSecond));
+        assertThat(runtimeFirst, lessThan(20l));
+    }
+
+
 }
