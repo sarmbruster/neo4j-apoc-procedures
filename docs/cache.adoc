@@ -1,0 +1,22 @@
+= Caching
+
+Neo4j uses an internal off-heap cache to speed up traversals by caching nodes, relationships and properties. However query results are never cached and every time a query is sent it is actually exectued. Other databases do feature caching of query results (remember cheating modes from car manufacturers ;-) )
+
+The goal of caching apoc is to provide an cache for query results
+
+[source,cypher]
+----
+call apoc.cache.cypherResults('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count
+----
+
+The following arguments are required:
+
+1. cypher query to be cached
+1. parameters
+1. time-to-live for that query
+
+The procedure returns a `value` for each query result holding a map with keys from the originating Cypher statement.
+
+The internal cache key is composed of cypher query *and* parameters. So for different parameters different a differenct cache entry will be used. If the result for the given key is not cached, the query is actually run and the results are stored.
+
+WARNING: in its current implementation the cache can grow arbitrarily and might cause memory/GC issues if not used wisely.
