@@ -1,8 +1,6 @@
 package apoc.cache;
 
-import apoc.algo.PathFinding;
 import apoc.util.TestUtil;
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -13,8 +11,14 @@ import org.neo4j.graphdb.Result;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
+import javax.cache.CacheManager;
+import javax.management.MBeanInfo;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static apoc.util.TestUtil.testCall;
@@ -42,7 +46,70 @@ public class CachingTest {
 
     @After
     public void tearDown() {
+
+        long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         db.shutdown();
+        if (stopwatch.runtime(TimeUnit.MILLISECONDS)-now > 1000) {
+            System.out.println("shutdown took longer than 1 sec, probably a transaction is still open");
+        };
+        CacheManager cacheManager = javax.cache.Caching.getCachingProvider().getCacheManager();
+        for (String name: cacheManager.getCacheNames()) {
+            cacheManager.destroyCache(name);
+        }
+    }
+
+    @Test
+    public void shouldHaveNoCaches() {
+        testResult(db, "call apoc.cache.caches() yield value return value", result -> {
+            assertFalse(result.hasNext());
+        });
+    }
+
+    @Test
+    public void shouldCreateAndDestoryCache() {
+        // when
+        testCall(db, "call apoc.cache.create('cypherResults', {}) yield value return value", stringObjectMap ->
+            assertEquals("cypherResults", stringObjectMap.get("value"))
+        );
+
+        // then
+        testResult(db, "call apoc.cache.caches() yield value return value", result -> {
+            List<Map<String, Object>> maps = Iterators.asList(result.columnAs("value"));
+            assertEquals(1, maps.size());
+            assertEquals("cypherResults", maps.get(0));
+        });
+
+        // when
+        Iterators.asList(db.execute("call apoc.cache.destroy('cypherResults')"));
+
+        // then: no caches anymore
+        testResult(db, "call apoc.cache.caches() yield value return value", result -> {
+            assertFalse(result.hasNext());
+        });
+    }
+
+    @Test
+    public void shouldFindStuffInCacheWithExpiry() throws InterruptedException {
+
+        // given
+        // create cache with 2 sec expiry
+        Iterators.asList(db.execute("call apoc.cache.create('cypherResults', {expires:100, unit:'MILLISECONDS' })"));
+
+        Iterators.asList(db.execute("call apoc.cache.put('cypherResults', 'name', 'JohnDoe')"));
+
+        // when / then
+        testResult(db, "call apoc.cache.get('cypherResults', 'name') yield value", result -> {
+            List<String> records = Iterators.asList(result.columnAs("value"));
+            assertEquals(1, records.size());
+            assertEquals("JohnDoe", records.get(0));
+        });
+
+        Thread.sleep(100);   // wait for expiry
+        testResult(db, "call apoc.cache.get('cypherResults', 'name') yield value", result -> {
+            List<Map<String,Object>> records = Iterators.asList(result.columnAs("value"));
+            assertEquals(0, records.size());
+        });
+
     }
 
     @Test
@@ -50,9 +117,10 @@ public class CachingTest {
 
         // given
         db.execute("CREATE (:Person{name:'John Doe'})");
+        Iterators.asList(db.execute("call apoc.cache.create('cypherResults', {expires:100})"));
 
         // when
-        List<Map<String, Object>> resultProcedure = Iterators.asList(db.execute("call apoc.cache.cypher('match (n) return n.name as name, count(*) as count', {}, 10000) yield value return value.name as name, value.count as count"));
+        List<Map<String, Object>> resultProcedure = Iterators.asList(db.execute("call apoc.cache.cypher('cypherResults', 'match (n) return n.name as name, count(*) as count', {}) yield value return value.name as name, value.count as count"));
         List<Map<String, Object>> resultDirect = Iterators.asList(db.execute("match (n) return n.name as name, count(*) as count"));
 
         // then
@@ -64,6 +132,7 @@ public class CachingTest {
 
         // given
         db.execute("CREATE (:Person{name:'John Doe'})");
+        Iterators.asList(db.execute("call apoc.cache.create('cypherResults', {expires:100})"));
         final String cypher = "match (n) return n.name as name, count(*) as count";
         // burn in: query compilation
         try (Result r = db.execute(cypher)) {
@@ -71,13 +140,13 @@ public class CachingTest {
         long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
 
         // when
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('cypherResults', '%s', {}) yield value return value.name as name, value.count as count", cypher)));
 
         long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeFirst = now-start;
         start = now;
 
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100000) yield value return value.name as name, value.count as count", cypher)));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('cypherResults', '%s', {}) yield value return value.name as name, value.count as count", cypher)));
 
         now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeSecond = now - start;
@@ -91,30 +160,42 @@ public class CachingTest {
     public void shouldExpireCachedResults() throws Exception {
 
         // given
-        db.execute("CREATE (:Person{name:'John Doe'})");
+        Iterators.asList(db.execute("CREATE (:Person{name:'John Doe'})"));
+        Iterators.asList(db.execute("call apoc.cache.create('cypherResults', {expires:100, unit:'MILLISECONDS'})"));
         final String cypher = "match (n) return n.name as name, count(*) as count";
 
-        // when
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
-        long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
-        assertEquals(1, Caching.cache.size());
+        // put into cache
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('cypherResults', '%s', {}) yield value return value.name as name, value.count as count", cypher)));
 
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        // when: reading from cache
+        long start = stopwatch.runtime(TimeUnit.MILLISECONDS);
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('cypherResults', '%s', {}) yield value return value.name as name, value.count as count", cypher)));
         long now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeFirst = now - start;
-        assertEquals(1, Caching.cache.size());
 
+        // wait for cache expiry
         Thread.sleep(100);
-        assertEquals(0, Caching.cache.size());
         start = stopwatch.runtime(TimeUnit.MILLISECONDS);
-        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('%s', {}, 100) yield value return value.name as name, value.count as count", cypher)));
+        System.out.println(stopwatch.runtime(TimeUnit.MILLISECONDS));
+        Iterators.asList(db.execute(String.format("call apoc.cache.cypher('cypherResults', '%s', {}) yield value return value.name as name, value.count as count", cypher)));
+        System.out.println(stopwatch.runtime(TimeUnit.MILLISECONDS));
         now = stopwatch.runtime(TimeUnit.MILLISECONDS);
         long runtimeSecond = now - start;
+        System.out.println(runtimeFirst + " -- " + runtimeSecond);
 
         // then
         assertThat(runtimeFirst, lessThan(runtimeSecond));
         assertThat(runtimeFirst, lessThan(20l));
     }
 
+
+//        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+//        Set<ObjectName> objectNames = server.queryNames(null, null);
+//        for (ObjectName name : objectNames) {
+//            MBeanInfo info = server.getMBeanInfo(name);
+//
+//            System.out.println("bean " + name + " desc: " + info.getDescription());
+//        }
+//        assertEquals(1, Caching.cache.size());
 
 }

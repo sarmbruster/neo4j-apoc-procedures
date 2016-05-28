@@ -84,6 +84,28 @@
     </dependency>
 
     <dependency>
+      <groupId>javax.cache</groupId>
+      <artifactId>cache-api</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+
+<!--
+    <dependency>
+      <groupId>org.ehcache</groupId>
+      <artifactId>jcache</artifactId>
+      <version>1.0.1</version>
+      <scope>test</scope>
+    </dependency>
+-->
+
+    <dependency>
+      <groupId>org.cache2k</groupId>
+      <artifactId>cache2k-jcache</artifactId>
+      <version>0.26-BETA</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
       <version>1.9.7</version>
