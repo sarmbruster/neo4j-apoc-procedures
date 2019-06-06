@@ -13,6 +13,7 @@ import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.neo4j.cypher.export.DatabaseSubGraph;
 import org.neo4j.cypher.export.SubGraph;
 import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.spatial.Point;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
@@ -264,9 +265,12 @@ public class ExportXls {
             } else if (value instanceof ZonedDateTime) {
                 ZonedDateTime zondedDateTime = (ZonedDateTime) value;
                 cell.setCellValue( Date.from(zondedDateTime.toInstant()));
+            } else if (value instanceof Point) {
+                Point point = (Point) value;
+                cell.setCellValue( point.toString() );
             } else {
                 cell.setCellValue(value.toString());
-                //throw new IllegalArgumentException("dunno know how to handle type " + value.getClass() + ". Please report this as a bug.");
+//                throw new IllegalArgumentException("dunno know how to handle type " + value.getClass() + ". Please report this as a bug.");
             }
         }
         return cellNum;
