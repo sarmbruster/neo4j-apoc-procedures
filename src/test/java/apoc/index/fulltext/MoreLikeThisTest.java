@@ -1,7 +1,6 @@
 package apoc.index.fulltext;
 
 import apoc.util.TestUtil;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -13,6 +12,8 @@ import org.neo4j.test.TestGraphDatabaseFactory;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.Assert.*;
 
 public class MoreLikeThisTest {
 
@@ -33,21 +34,19 @@ public class MoreLikeThisTest {
 
     @Test
     public void shouldMoreLikeThisWork() {
-
-        db.execute("CALL db.index.fulltext.createNodeIndex('sampleIndex',['Quote'],['contents'],{analyzer:'german'})");
-
-        db.execute("UNWIND $quotes as quote CREATE (:Quote{contents:quote})", MapUtil.map("quotes", quotes));
+        db.execute("CALL db.index.fulltext.createNodeIndex('sampleIndex',['Quote'],['content'],{analyzer:'german'})");
+        db.execute("UNWIND $quotes as quote CREATE (:Quote{content:quote})", MapUtil.map("quotes", quotes));
         db.execute("CALL db.index.fulltext.awaitEventuallyConsistentIndexRefresh()");
 
-        Result r = db.execute("CALL db.index.fulltext.queryNodes('sampleIndex','Seiten')");
+        Result r = db.execute("CALL apoc.index.fulltext.moreLikeThis('sampleIndex', ['content'], 'viele Seiten') YIELD node, score, rel RETURN *");
         List<Map<String, Object>> maps = Iterators.asList(r);
-
-        r = db.execute("CALL apoc.index.fulltext.moreLikeThis('sampleIndex', 'contents', 'viele Seiten') YIELD node RETURN node.name");
-
-        Assert.assertFalse(r.hasNext());
-
-
-
+        assertEquals(3, maps.size());
+        maps.forEach( map -> {
+            Double score = (Double) map.get("score");
+            assertTrue(score > 0 && score < 1);
+            assertNotNull(map.get("node"));
+            assertNull(map.get("rel"));
+        });
     }
 
 }

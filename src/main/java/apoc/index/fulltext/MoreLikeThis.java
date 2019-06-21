@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -44,7 +45,7 @@ public class MoreLikeThis {
 
     @Procedure
     public Stream<ScoredNodeOrRelationshipResult> moreLikeThis(@Name("indexName") String indexName,
-                                           @Name("propertyKey") String propertyKey,
+                                           @Name("propertyKeys") List<String> propertyKeys,
                                            @Name("term") String term,
                                            @Name(value="config", defaultValue = "{}") Map<String,Object> config) throws IOException {
 
@@ -54,10 +55,12 @@ public class MoreLikeThis {
 
         org.apache.lucene.queries.mlt.MoreLikeThis mlt = new org.apache.lucene.queries.mlt.MoreLikeThis(luceneIndexReader);
         mlt.setAnalyzer(lfii.getAnalyzer());
+        mlt.setFieldNames(propertyKeys.toArray(new String[]{}));
+
         mlt.setMinTermFreq(Util.toInteger(config.getOrDefault("minTermFreq", "1")));
         mlt.setMinDocFreq(Util.toInteger(config.getOrDefault("minDocFreq", "1")));
 
-        Query query = mlt.like(propertyKey, new StringReader(term));
+        Query query = mlt.like(null, new StringReader(term));
         TopDocs topDocs = indexSearcher.search(query, Util.toInteger(config.getOrDefault("maxResults", "10")));
 
         return Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
@@ -77,12 +80,12 @@ public class MoreLikeThis {
     public static class ScoredNodeOrRelationshipResult {
         final public Double score;
         final public Node node;
-        final public Relationship relationship;
+        final public Relationship rel;
 
-        public ScoredNodeOrRelationshipResult(Double score, Node node, Relationship relationship) {
+        public ScoredNodeOrRelationshipResult(Double score, Node node, Relationship rel) {
             this.score = score;
             this.node = node;
-            this.relationship = relationship;
+            this.rel = rel;
         }
     }
 
