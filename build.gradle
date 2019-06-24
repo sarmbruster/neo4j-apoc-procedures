@@ -27,6 +27,11 @@ group = 'org.neo4j.procedure'
 version = '3.5.0.4'
 archivesBaseName = 'apoc'
 
+repositories {
+    jcenter()
+    mavenLocal()
+}
+
 jar {
     manifest {
         attributes 'Implementation-Version': version
@@ -66,8 +71,8 @@ compileJava {
 
 dependencies {
 
-    apt 'net.biville.florent:neo4j-sproc-compiler:1.2'
-    apt group: 'org.neo4j', name: 'neo4j', version: neo4jVersionEffective	
+    apt group: 'net.biville.florent', name: 'neo4j-sproc-compiler', version:'1.3-SNAPSHOT', changing: true
+    apt group: 'org.neo4j', name: 'neo4j', version: neo4jVersionEffective
     compile group: 'commons-codec', name: 'commons-codec', version: '1.9'
     compileOnly group: 'com.sun.mail', name: 'javax.mail', version: '1.6.0'
     testCompile group: 'com.sun.mail', name: 'javax.mail', version: '1.6.0'
