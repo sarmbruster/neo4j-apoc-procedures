@@ -3,6 +3,9 @@ package apoc.cypher;
 import apoc.util.TestUtil;
 import apoc.util.Util;
 import apoc.util.Utils;
+import org.hamcrest.BaseMatcher;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
@@ -23,7 +26,7 @@ import static apoc.util.TestUtil.testCall;
 import static apoc.util.TestUtil.testResult;
 import static apoc.util.Util.map;
 import static java.util.Collections.singletonMap;
-import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.*;
 
 /**
@@ -347,8 +350,20 @@ public class CypherTest {
 
     @Test(timeout=9000)
     public void testWithTimeout() {
-        Result result = db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10000)', null, {timeout})", singletonMap("timeout", 100));
-        assertFalse(result.hasNext());
+        Result result = db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10000)', null, $timeout)", singletonMap("timeout", 100));
+        assertFalse( result.hasNext());
+    }
+
+    @Test(timeout=9000)
+    public void testWithTimeoutAndStatus() {
+        Map<String, Object> result = Iterators.single(db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10000)', null, $timeout, true)", singletonMap("timeout", 100)));
+
+        Map<String, Object> value = (Map<String, Object>) result.get("value");
+        assertThat(value,
+                allOf(
+                        hasEntry("status", "TERMINATED"),
+                        hasEntry("error", null)
+                ));
     }
 
     @Test
@@ -368,8 +383,53 @@ public class CypherTest {
 
     @Test(timeout=9000)
     public void shouldTooLongTimeboxBeNotHarmful() {
-        Result result = db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10)', null, {timeout})", singletonMap("timeout", 10000));
+        Result result = db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10)', null, $timeout)", singletonMap("timeout", 10000));
         assertFalse(result.hasNext());
+
+        result = db.execute("CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10)', null, $timeout, true)", singletonMap("timeout", 10000));
+
+        Map<String, Object> single = Iterators.single(result);
+        Map<String, Object> value = (Map<String, Object>) single.get("value");
+        assertThat(value,
+                allOf(
+                        hasEntry("status", "COMPLETE"),
+                        hasEntry("error", null)
+                ));
+    }
+
+    @Test
+    public void testInvalidCypherInTimebox() {
+        Result result = db.execute("CALL apoc.cypher.runTimeboxed('this is not cypher', null, $timeout)", singletonMap("timeout", 1000));
+        assertFalse(result.hasNext());
+
+        result = db.execute("CALL apoc.cypher.runTimeboxed('this is not cypher', null, $timeout, true)", singletonMap("timeout", 1000));
+        Map<String, Object> single = Iterators.single(result);
+
+        Map<String, Object> value = (Map<String, Object>) single.get("value");
+        assertThat(value,
+                allOf(
+                        hasEntry("status", "ERROR"),
+                        hasEntry( equalTo("error"), stringValue(containsString("Invalid input")))
+                ));
+    }
+
+    private static<T> Matcher<Object> stringValue(final Matcher<T> subMatcher) {
+        return new BaseMatcher<Object>() {
+            @Override
+            public boolean matches(Object item) {
+                return subMatcher.matches(String.class.cast(item));
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                description.appendDescriptionOf(subMatcher);
+            }
+
+            @Override
+            public void describeMismatch(Object item, Description description) {
+                subMatcher.describeMismatch(item, description);
+            }
+        };
     }
 
     @Test
