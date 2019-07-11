@@ -52,7 +52,7 @@ You can use a similar approach to get the property-keys per label:
 [source,cypher]
 ----
 CALL db.labels() yield label
-call apoc.cypher.run("MATCH (n:`"+label+"`) RETURN keys(n) as keys LIMIT 1",null) yield value
+call apoc.cypher.run("MATCH (n:`"+label+"`) RETURN keys(n) as keys LIMIT 1", null) yield value
 RETURN label, value.keys as keys
 ----
 
@@ -68,6 +68,26 @@ return value.p
 ----
 
 This will return all results being returned within 10000 milliseconds. The expensive statement will be terminated after that period.
+
+Optionally `status` and `error` can be returned. This requires to set the forth (optional) parameter to true:
+
+[source,cypher]
+----
+CALL apoc.cypher.runTimeboxed('CALL apoc.util.sleep(10000)', null, 100, true) YIELD value
+----
+
+will return a map:
+
+[source,json]
+----
+{
+  "status": "TERMINATED",
+  "error": null
+
+}
+----
+
+`status` might be either `TERMINATED`, `ERROR`, `COMPLETE` or `TIMEOUT`.
 
 == Run multiple Statements
 
