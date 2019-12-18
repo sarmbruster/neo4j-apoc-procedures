@@ -19,6 +19,8 @@ and might change within minor release updates.
 |===
 | apoc.systemdb.graph | returns a `nodes` and `relationships` stored in systemdb.
 | apoc.systemdb.execute | executes an DDL command on system db, yields `row` for further processing
+| apoc.system.create.node | similar to `apoc.create.node` but operates on systemdb
+| apoc.system.create.relationship | similar to `apoc.create.relationship` but operates on systemdb
 |===
 
 .isType example

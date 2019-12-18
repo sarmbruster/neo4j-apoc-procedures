@@ -23,12 +23,19 @@ public class Create {
     @Context
     public Transaction tx;
 
+
+    public Create() {
+    }
+
+    public Create(Transaction tx) {
+        this.tx = tx;
+    }
+
     @Procedure(mode = Mode.WRITE)
     @Description("apoc.create.node(['Label'], {key:value,...}) - create node with dynamic labels")
     public Stream<NodeResult> node(@Name("label") List<String> labelNames, @Name("props") Map<String, Object> props) {
         return Stream.of(new NodeResult(setProperties(tx.createNode(Util.labels(labelNames)),props)));
     }
-
 
     @Procedure(mode = Mode.WRITE)
     @Description("apoc.create.addLabels( [node,id,ids,nodes], ['Label',...]) - adds the given labels to the node or nodes")
