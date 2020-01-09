@@ -78,10 +78,10 @@ public class Periodic {
                     return executeNumericResultStatement(statement, merge(window, params));
                 } catch(Exception e) {
                     failedBatches.incrementAndGet();
-                    recordError(batchErrors, e);
+                    recordError(log, batchErrors, e);
                     return 0L;
                 }
-            }), commitErrors, failedCommits, 0L);
+            }), commitErrors, failedCommits, 0L, log);
             total += updates;
             if (updates > 0) executions++;
         } while (updates > 0 && !Util.transactionIsTerminated(terminationGuard));
@@ -90,7 +90,8 @@ public class Periodic {
         return Stream.of(new RundownResult(total,executions, timeTaken, batches.get(),failedBatches.get(),batchErrors, failedCommits.get(), commitErrors, wasTerminated));
     }
 
-    private void recordError(Map<String, Long> executionErrors, Exception e) {
+    private void recordError(Log log, Map<String, Long> executionErrors, Exception e) {
+        log.error("in recordError", e);
         executionErrors.compute(getMessages(e),(s, i) -> i == null ? 1 : i + 1);
     }
 
@@ -363,7 +364,7 @@ public class Periodic {
                         if (failedParams >= 0) {
                             failedParamsMap.put(Long.toString(finalBatches), new ArrayList<Map<String,Object>>(batch.subList(0, Math.min(failedParams+1, batch.size()))));
                         }
-                        recordError(operationErrors, e);
+                        recordError(log, operationErrors, e);
                     }
                     return currentBatchSize;
                 };
@@ -383,7 +384,7 @@ public class Periodic {
                                 if (failedParams >= 0) {
                                     failedParamsMap.put(Long.toString(finalBatches), new ArrayList<Map<String,Object>>(batch.subList(0, Math.min(failedParams+1, batch.size()))));
                                 }
-                                recordError(operationErrors, e);
+                                recordError(log, operationErrors, e);
                             }
                             return 1;
                         }).mapToLong(l -> l).sum();
@@ -399,7 +400,7 @@ public class Periodic {
                 while (it.hasNext()) {
                     Future<Long> future = it.next();
                     if (future.isDone()) {
-                        successes += Util.getFuture(future, batchErrors, failedBatches, 0L);
+                        successes += Util.getFuture(future, batchErrors, failedBatches, 0L, log);
                         it.remove();
                     }
                 }
@@ -407,9 +408,9 @@ public class Periodic {
         } while (iterator.hasNext());
         boolean wasTerminated = Util.transactionIsTerminated(terminationGuard);
         if (wasTerminated) {
-            successes += futures.stream().mapToLong(f -> Util.getFutureOrCancel(f, batchErrors, failedBatches, 0L)).sum();
+            successes += futures.stream().mapToLong(f -> Util.getFutureOrCancel(f, batchErrors, failedBatches, 0L, log)).sum();
         } else {
-            successes += futures.stream().mapToLong(f -> Util.getFuture(f, batchErrors, failedBatches, 0L)).sum();
+            successes += futures.stream().mapToLong(f -> Util.getFuture(f, batchErrors, failedBatches, 0L, log)).sum();
         }
         Util.logErrors("Error during iterate.commit:", batchErrors, log);
         Util.logErrors("Error during iterate.execute:", operationErrors, log);

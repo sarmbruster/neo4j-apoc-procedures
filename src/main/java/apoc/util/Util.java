@@ -7,6 +7,7 @@ import apoc.path.RelationshipTypeAndDirections;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.function.ThrowingSupplier;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.Node;
 import org.neo4j.helpers.collection.Iterables;
@@ -551,25 +552,32 @@ public class Util {
         }
     }
 
-    public static <T> T getFuture(Future<T> f, Map<String, Long> errorMessages, AtomicInteger errors, T errorValue) {
-        try {
-            return f.get();
-        } catch (InterruptedException | ExecutionException e) {
-            errors.incrementAndGet();
-            errorMessages.compute(e.getMessage(),(s, i) -> i == null ? 1 : i + 1);
-            return errorValue;
-        }
+    public static <T> T getFuture(Future<T> f, Map<String, Long> errorMessages, AtomicInteger errors, T errorValue, Log log) {
+        return withErrorCollector( () -> f.get(), errorMessages, errors, errorValue, log);
     }
-    public static <T> T getFutureOrCancel(Future<T> f, Map<String, Long> errorMessages, AtomicInteger errors, T errorValue) {
-        try {
-            if (f.isDone()) return f.get();
-            else {
+
+    public static <T> T getFutureOrCancel(Future<T> f, Map<String, Long> errorMessages, AtomicInteger errors, T errorValue, Log log) {
+        return withErrorCollector( () -> {
+            if (f.isDone()) {
+                return f.get();
+            } else {
                 f.cancel(true);
                 errors.incrementAndGet();
+                return errorValue;
             }
+        }, errorMessages, errors, errorValue, log);
+    }
+
+    private static <T> T withErrorCollector(ThrowingSupplier<T, Exception> supplier, Map<String, Long> errorMessages, AtomicInteger errors, T errorValue, Log log) {
+        try {
+            return supplier.get();
         } catch (InterruptedException | ExecutionException e) {
+            log.error("withErrorCollector: ", e);
             errors.incrementAndGet();
             errorMessages.compute(e.getMessage(),(s, i) -> i == null ? 1 : i + 1);
+        } catch (Exception e) {
+            log.error("withErrorCollector: ", e);
+            throw new RuntimeException("this should never happen");
         }
         return errorValue;
     }
