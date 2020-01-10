@@ -85,6 +85,7 @@ public class ApocConfig extends LifecycleAdapter {
 
         // expose this config instance via `@Context ApocConfig config`
         globalProceduresRegistry.registerComponent((Class<ApocConfig>) getClass(), ctx -> this, true);
+        globalProceduresRegistry.registerComponent(DatabaseManagementService.class, context -> databaseManagementService, true);
         this.log.info("successfully registered ApocConfig for @Context");
     }
 

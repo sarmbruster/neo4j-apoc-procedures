@@ -1,6 +1,5 @@
 package apoc.export.db;
 
-import apoc.export.cypher.ExportCypher;
 import apoc.graph.Graphs;
 import apoc.util.TestUtil;
 import org.junit.Before;
@@ -30,7 +29,7 @@ public class ExportDBTest {
     @Before
     public void setUp() throws Exception {
         apocConfig().setProperty(APOC_EXPORT_FILE_ENABLED, true);
-        TestUtil.registerProcedure(db, ExportCypher.class, Graphs.class);
+        TestUtil.registerProcedure(db, ExportDb.class, Graphs.class);
         db.executeTransactionally("CREATE INDEX ON :Bar(first_name, last_name)");
         db.executeTransactionally("CREATE INDEX ON :Foo(name)");
         db.executeTransactionally("CREATE CONSTRAINT ON (b:Bar) ASSERT b.name IS UNIQUE");
@@ -53,7 +52,7 @@ public class ExportDBTest {
 
     @Test
     public void testExportAllCypherResults() {
-        TestUtil.testCall(db, "CALL apoc.export.cypher.all(null,{useOptimizations: { type: 'none'}, format: 'neo4j-shell'})", (r) -> {
+        TestUtil.testCall(db, "CALL apoc.export.db.all('copydb', {batchImport: true})", (r) -> {
 //            assertResults(null, r, "database");
 //            assertEquals(EXPECTED_NEO4J_SHELL, r.get("cypherStatements"));
         });
