@@ -1,33 +1,33 @@
 package apoc.export.db;
 
+import apoc.custom.CypherProcedures;
 import apoc.graph.Graphs;
 import apoc.util.TestUtil;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestName;
-import org.neo4j.test.rule.DbmsRule;
-import org.neo4j.test.rule.ImpermanentDbmsRule;
+import org.junit.rules.TemporaryFolder;
+import org.neo4j.configuration.GraphDatabaseSettings;
+import org.neo4j.dbms.api.DatabaseManagementService;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.test.TestDatabaseManagementServiceBuilder;
 
 import static apoc.ApocConfig.APOC_EXPORT_FILE_ENABLED;
 import static apoc.ApocConfig.apocConfig;
 
 public class ExportDBTest {
 
-//    private static final Map<String, Object> exportConfig = map("useOptimizations", map("type", "none"), "separateFiles", true, "format", "neo4j-admin");
-
     @Rule
-    public DbmsRule db = new ImpermanentDbmsRule();
-//            .withSetting(GraphDatabaseSettings.load_csv_file_url_root, directory.toPath().toAbsolutePath());
+    public TemporaryFolder STORE_DIR = new TemporaryFolder();
 
-    @Rule
-    public TestName testName = new TestName();
-
-//    private static final String OPTIMIZED = "Optimized";
-//    private static final String ODD = "OddDataset";
+    private GraphDatabaseService db;
+    private DatabaseManagementService databaseManagementService;
 
     @Before
     public void setUp() throws Exception {
+        databaseManagementService = new TestDatabaseManagementServiceBuilder(STORE_DIR.getRoot()).build();
+        db = databaseManagementService.database(GraphDatabaseSettings.DEFAULT_DATABASE_NAME);
+        TestUtil.registerProcedure(db, CypherProcedures.class);
         apocConfig().setProperty(APOC_EXPORT_FILE_ENABLED, true);
         TestUtil.registerProcedure(db, ExportDb.class, Graphs.class);
         db.executeTransactionally("CREATE INDEX ON :Bar(first_name, last_name)");
@@ -46,9 +46,17 @@ public class ExportDBTest {
 //                    "(e:Bar {name:'bar2',age:44})," +
 //                    "(f)-[:KNOWS {since:2016}]->(b)");
 //        } else {
-            db.executeTransactionally("CREATE (f:Foo {name:'foo', born:date('2018-10-31')})-[:KNOWS {since:2016}]->(b:Bar {name:'bar',age:42}),(c:Bar {age:12})");
+        db.executeTransactionally("CREATE (f:Foo {name:'foo', born:date('2018-10-31')})-[:KNOWS {since:2016}]->(b:Bar {name:'bar',age:42}),(c:Bar {age:12})");
 //        }
     }
+
+
+//    @Rule
+//    public TestName testName = new TestName();
+
+//    private static final String OPTIMIZED = "Optimized";
+//    private static final String ODD = "OddDataset";
+
 
     @Test
     public void testExportAllCypherResults() {

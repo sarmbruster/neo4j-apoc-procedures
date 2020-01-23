@@ -4,11 +4,39 @@ import apoc.ApocConfig;
 import apoc.Pools;
 import apoc.export.cypher.ExportFileManager;
 import apoc.result.ProgressInfo;
+import org.neo4j.common.DependencyResolver;
+import org.neo4j.configuration.Config;
 import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.internal.batchimport.AdditionalInitialIds;
+import org.neo4j.internal.batchimport.Configuration;
+import org.neo4j.internal.batchimport.EmptyLogFilesInitializer;
+import org.neo4j.internal.batchimport.ImportLogic;
+import org.neo4j.internal.batchimport.InputIterable;
+import org.neo4j.internal.batchimport.InputIterator;
 import org.neo4j.internal.batchimport.ParallelBatchImporter;
-import org.neo4j.procedure.*;
+import org.neo4j.internal.batchimport.input.BadCollector;
+import org.neo4j.internal.batchimport.input.Collector;
+import org.neo4j.internal.batchimport.input.IdType;
+import org.neo4j.internal.batchimport.input.Input;
+import org.neo4j.internal.batchimport.input.InputChunk;
+import org.neo4j.internal.batchimport.input.InputEntityVisitor;
+import org.neo4j.internal.batchimport.input.ReadableGroups;
+import org.neo4j.internal.batchimport.staging.ExecutionMonitors;
+import org.neo4j.io.fs.DefaultFileSystemAbstraction;
+import org.neo4j.io.layout.DatabaseLayout;
+import org.neo4j.io.layout.Neo4jLayout;
+import org.neo4j.io.pagecache.PageCache;
+import org.neo4j.kernel.impl.store.format.standard.StandardV4_0;
+import org.neo4j.logging.internal.LogService;
+import org.neo4j.procedure.Context;
+import org.neo4j.procedure.Description;
+import org.neo4j.procedure.Name;
+import org.neo4j.procedure.Procedure;
+import org.neo4j.procedure.TerminationGuard;
+import org.neo4j.scheduler.JobScheduler;
 
 import java.io.IOException;
 import java.util.Map;
@@ -38,6 +66,9 @@ public class ExportDb {
     @Context
     public DatabaseManagementService databaseManagementService;
 
+    @Context
+    public DependencyResolver dependencyResolver;
+
     public ExportDb(GraphDatabaseService db) {
         this.db = db;
     }
@@ -54,7 +85,36 @@ public class ExportDb {
             throw new IllegalArgumentException(String.format("cannot use batch importer on existing database '%s'", dbName));
         }
 
-        new ParallelBatchImporter()
+        Config neo4jConfig = dependencyResolver.resolveDependency(Config.class);
+        DatabaseLayout databaseLayout = Neo4jLayout.of(neo4jConfig).databaseLayout(dbName);
+        Collector badCollector = new BadCollector(System.out, BadCollector.UNLIMITED_TOLERANCE, 0x7);
+        ParallelBatchImporter importer = new ParallelBatchImporter(
+                databaseLayout,
+                new DefaultFileSystemAbstraction(),
+                dependencyResolver.resolveDependency(PageCache.class),
+                Configuration.DEFAULT,
+                dependencyResolver.resolveDependency(LogService.class),
+                ExecutionMonitors.defaultVisible(),
+                AdditionalInitialIds.EMPTY,
+                neo4jConfig,
+                StandardV4_0.RECORD_FORMATS,
+                ImportLogic.NO_MONITOR,
+                dependencyResolver.resolveDependency(JobScheduler.class),
+                badCollector,
+                EmptyLogFilesInitializer.INSTANCE
+        );
+
+        InputIterable nodes = new SingleChunkIterable(tx.getAllNodes().iterator());
+        InputIterable relationships = new SingleChunkIterable(tx.getAllRelationships().iterator());
+
+                //new IteratorInputChunk(tx.getAllNodes().iterator());
+        Input input = Input.input(nodes,
+                relationships,
+                IdType.INTEGER,
+                Input.knownEstimates(-1, -1, -1, -1, -1, -1, -1),
+                ReadableGroups.EMPTY
+        );
+        importer.doImport(input);
 
         return Stream.of(DataProgressInfo.EMPTY);
 
@@ -66,6 +126,7 @@ public class ExportDb {
         return exportCypher(fileName, source, new DatabaseSubGraph(tx), new ExportConfig(config), false);
 */
     }
+
 
 /*    @Procedure
     @Description("apoc.export.cypher.data(nodes,rels,file,config) - exports given nodes and relationships incl. indexes as cypher statements to the provided file")
@@ -182,5 +243,60 @@ public class ExportDb {
         }
         public static final DataProgressInfo EMPTY = new DataProgressInfo(ProgressInfo.EMPTY);
 
+    }
+
+    public class IteratorInputChunk<T> implements InputChunk {
+
+        private final ResourceIterator<T> iterator;
+
+        public IteratorInputChunk(ResourceIterator<T> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public boolean next(InputEntityVisitor visitor) throws IOException {
+            if (iterator.hasNext()) {
+                T current = iterator.next();
+
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            iterator.close();
+        }
+    }
+
+    private class SingleChunkIterable<T> implements InputIterable {
+        private final ResourceIterator<T> iterator;
+        boolean hasNext = true;
+
+        public SingleChunkIterable(ResourceIterator<T> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public InputIterator iterator() {
+            return new InputIterator() {
+                @Override
+                public InputChunk newChunk() {
+                    return new IteratorInputChunk<T>(iterator);
+                }
+
+                @Override
+                public boolean next(InputChunk chunk) throws IOException {
+                    boolean response = hasNext;
+                    hasNext = false;
+                    return response;
+                }
+
+                @Override
+                public void close() throws IOException {
+                }
+            };
+        }
     }
 }
